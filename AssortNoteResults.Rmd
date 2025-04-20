@@ -1,0 +1,628 @@
+---
+title: "Assortative Matching Using Discrete Copula and Yule's Rho"
+author: "[Thomas Coleman](http://www.hilerun.org/econ)"
+output: html_notebook
+---
+
+# Assortative Matching Results Using Discrete Copula, Yule's Rank Correlation, Hellinger Dependence, and Related Metrics
+
+#### See "Notes on Dependence, Correlation, and Discrete Copulas, with Application to Exchange Mobility and Assortative Matching" working paper at https://papers.ssrn.com/abstract=5057549 
+
+#### This notebook is licensed under the [BSD 2-Clause License](https://opensource.org/licenses/BSD-2-Clause)
+
+
+Based on 
+Geenens, Gery. 2020. “Copula Modeling for Discrete Random Vectors.” Dependence Modeling 8 (1): 417–40. https://doi.org/10.1515/demo-2020-0022.
+———. 2023. “Towards a Universal Representation of Statistical Dependence.” arXiv. https://doi.org/10.48550/arXiv.2302.08151.
+
+and also 
+Coleman, Thomas S. 2025. “Notes on Dependence, Correlation, and Discrete Copulas, with Application to Exchange Mobility and Assortative Matching.” SSRN. https://papers.ssrn.com/abstract=5057549. But more up-to-date at https://www.closemountain.com/papers/ExchangeMobilityNotes.pdf and assortative matching specifically at https://www.closemountain.com/papers/AssortNote.pdf 
+
+Examining data from
+
+- Chiappori, Pierre-Andre, Monica Costa Dias, Costas Meghir, and Hanzhe Zhang. 2024. “Changes in Marital Sorting: Theory and Evidence from the US.” https://hanzhezhang.github.io/research/2411SortingMeasures.pdf.
+- Eika, Lasse, Magne Mogstad, and Basit Zafar. 2019. “Educational Assortative Mating and Household Income Inequality.” Journal of Political Economy 127 (6): 2795–2835. https://doi.org/10.1086/702018.
+- Greenwood, Jeremy, Nezih Guner, Georgi Kocharkov, and Cezar Santos. 2014. “Marry Your Like: Assortative Mating and Income Inequality.” American Economic Review 104 (5): 348–53. https://doi.org/10.1257/aer.104.5.348.
+- Schwartz, Christine R., and Robert D. Mare. 2005. “Trends in Educational Assortative Marriage from 1940 to 2003.” Demography (Springer Nature) 42 (4): 621–46. https://doi.org/10.1353/dem.2005.0036.
+
+
+
+```{r}
+rm(list=ls())    # starts a fresh workspace
+#
+library(knitr)
+options(scipen=5)
+
+
+# Alternative mpifp ??
+# install.packages("mpifp")
+require("mpifp")
+
+
+# Load Copula and other various functions
+knit('CopulaFunctions1.Rmd', tangle=TRUE)
+source('CopulaFunctions1.R') 
+
+
+
+```
+
+
+
+
+
+
+## Chiappori, Costas Dias, Meghir, Zhang
+
+chiappori, Pierre-Andre, Monica Costa Dias, Costas Meghir, and Hanzhe Zhang. 2024. “Changes in Marital Sorting: Theory and Evidence from the US.” https://hanzhezhang.github.io/research/2411SortingMeasures.pdf.
+
+
+```{r}
+ 
+# Table 2
+pChiappori1950 <-matrix(c(.047,.039,.011,.002,0,
+                           .031,.2,.071,.024,.006,
+                           .009,.091,.108,.038,.01,
+                           .002,.039,.058,.078,.02,
+                           .001,.011,.024,.044,.037),5,5,byrow=TRUE)
+# Too high by .001, reduce all proportionally:
+pChiappori1950 <- pChiappori1950 / sum(pChiappori1950)
+rChiappori1950 <- calcDiscreteCopula(pChiappori1950)
+rHChiappori1950 <- calcDiscreteHellinger(pChiappori1950)
+rAChiappori1950 <- altham_index(pChiappori1950)
+colnames(pChiappori1950) <- c('HSD','HS','SC','C','PG')
+rownames(pChiappori1950) <- c('HSD','HS','SC','C','PG')
+rSChiappori1950 <- sort_parm(pChiappori1950)
+rSChiappori1950_pbar <- sort_parm(rChiappori1950$pbar)
+
+
+pChiappori1970 <-matrix(c(.045,.024,.012,.004,.001,
+                           .02,.135,.078,.038,.013,
+                           .006,.049,.115,.059,.024,
+                           .002,.02,.048,.116,.049,
+                           .001,.005,.018,.053,.066),5,5,byrow=TRUE)
+# Too high by .001, reduce all proportionally:
+pChiappori1970 <- pChiappori1970 / sum(pChiappori1970)
+rChiappori1970 <- calcDiscreteCopula(pChiappori1970)
+rHChiappori1970 <- calcDiscreteHellinger(pChiappori1970)
+rAChiappori1970 <- altham_index(pChiappori1970)
+colnames(pChiappori1970) <- c('HSD','HS','SC','C','PG')
+rownames(pChiappori1970) <- c('HSD','HS','SC','C','PG')
+rSChiappori1970 <- sort_parm(pChiappori1970)
+rSChiappori1970_pbar <- sort_parm(rChiappori1970$pbar)
+
+
+```
+
+Calculate Pearson correlation weighted by original probabilities 
+
+```{r}
+tablesChiap50 <- list()
+tablesChiap70 <- list()
+namesChiap <- list('C&PG vs SC','PG vs C','C vs SC','C&PG vs other')
+
+# Reduce to 'C&PG' vs 'SC'
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1950[3,3])
+xx1[2,2] <- sum(pChiappori1950[4:5,4:5])
+xx1[1,2] <- sum(pChiappori1950[3,4:5])
+xx1[2,1] <- sum(pChiappori1950[4:5,3])
+tablesChiap50[[1]] <- xx1 / sum(xx1)   # Normalize to sum to 1 ??
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1970[3,3])
+xx1[2,2] <- sum(pChiappori1970[4:5,4:5])
+xx1[1,2] <- sum(pChiappori1970[3,4:5])
+xx1[2,1] <- sum(pChiappori1970[4:5,3])
+tablesChiap70[[1]] <- xx1 / sum(xx1)   # Normalize to sum to 1 ??
+# Reduce to 'PG' vs 'C'
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1950[4,4])
+xx1[2,2] <- sum(pChiappori1950[5,5])
+xx1[1,2] <- sum(pChiappori1950[4,5])
+xx1[2,1] <- sum(pChiappori1950[5,4])
+tablesChiap50[[2]] <- xx1 / sum(xx1)   # Normalize to sum to 1 ??
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1970[4,4])
+xx1[2,2] <- sum(pChiappori1970[5,5])
+xx1[1,2] <- sum(pChiappori1970[4,5])
+xx1[2,1] <- sum(pChiappori1970[5,4])
+tablesChiap70[[2]] <- xx1 / sum(xx1)   # Normalize to sum to 1 ??
+# Reduce to 'C' vs 'SC'
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1950[3,3])
+xx1[2,2] <- sum(pChiappori1950[4,4])
+xx1[1,2] <- sum(pChiappori1950[3,4])
+xx1[2,1] <- sum(pChiappori1950[4,3])
+tablesChiap50[[3]] <- xx1 / sum(xx1)   # Normalize to sum to 1 ??
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1970[3,3])
+xx1[2,2] <- sum(pChiappori1970[4,4])
+xx1[1,2] <- sum(pChiappori1970[3,4])
+xx1[2,1] <- sum(pChiappori1970[4,3])
+tablesChiap70[[3]] <- xx1 / sum(xx1)   # Normalize to sum to 1 ??
+# Reduce to 'others' vs 'C&PG'
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1950[1:3,1:3])
+xx1[2,2] <- sum(pChiappori1950[4:5,4:5])
+xx1[1,2] <- sum(pChiappori1950[1:3,4:5])
+xx1[2,1] <- sum(pChiappori1950[4:5,1:3])
+tablesChiap50[[4]] <- xx1
+xx1 <- matrix(0,nrow=2,ncol=2)
+xx1[1,1] <- sum(pChiappori1970[1:3,1:3])
+xx1[2,2] <- sum(pChiappori1970[4:5,4:5])
+xx1[1,2] <- sum(pChiappori1970[1:3,4:5])
+xx1[2,1] <- sum(pChiappori1970[4:5,1:3])
+tablesChiap70[[4]] <- xx1
+
+
+
+rChiappori_1950_2x2 <- lapply(tablesChiap50,calcDiscreteCopula)
+rChiappori_1970_2x2 <- lapply(tablesChiap70,calcDiscreteCopula)
+rHChiappori_1950_2x2 <- lapply(tablesChiap50,calcDiscreteHellinger)
+rHChiappori_1970_2x2 <- lapply(tablesChiap70,calcDiscreteHellinger)
+rSChiappori_1950_2x2 <- lapply(tablesChiap50,sort_parm)
+rSChiappori_1970_2x2 <- lapply(tablesChiap70,sort_parm)
+rSChiappori_1950_2x2_pbar <- lapply(rChiappori_1950_2x2, function(x) sort_parm(x$pbar))
+rSChiappori_1970_2x2_pbar <- lapply(rChiappori_1970_2x2, function(x) sort_parm(x$pbar))
+
+
+
+```
+
+
+```{r}
+
+Chiappori_results <- matrix(0,nrow=27,ncol=7)
+colnames(Chiappori_results) = c('C&PG vs SC','PG vs C','C vs SC','C&PG vs other','all Yuled',
+                                'all HDepend','Altham')
+rownames(Chiappori_results) = c('OR 1950','OR 1970','diff','Yule 1950','Yule 1970','diff',
+                                'Pearson 1950','Pearson 1970','diff','PearsonRank 1950','PearsonRank 1970','diff',
+                                'Avg Diag 1950','Avg Diag 1970','diff','Avg Diag 1950 pbar','Avg Diag 1970 pbar','diff',
+                                'Avg 1950 pbar normed','Avg 1970 pbar normed','diff',
+                                'H Diag Assoc rho','H Diag Assoc rho','diff',
+                                'H Diag Assoc dist','H Diag Assoc Dist','diff')
+
+# First, populate odds ratios0
+for (i in 1:length(tablesChiap50)) {
+  Chiappori_results[1,i] = rChiappori_1950_2x2[[i]]$oddsratio
+  Chiappori_results[2,i] = rChiappori_1970_2x2[[i]]$oddsratio
+  Chiappori_results[3,i] = Chiappori_results[2,i] - Chiappori_results[1,i]
+}
+
+# Second, populate Yule rhos
+for (i in 1:length(tablesChiap50)) {
+  Chiappori_results[4,i] = rChiappori_1950_2x2[[i]]$YuleY
+  Chiappori_results[5,i] = rChiappori_1970_2x2[[i]]$YuleY
+  Chiappori_results[6,i] = Chiappori_results[5,i] - Chiappori_results[4,i]
+}
+Chiappori_results[4,5] = rChiappori1950$YuleY
+Chiappori_results[5,5] = rChiappori1970$YuleY
+Chiappori_results[6,5] = Chiappori_results[5,5] - Chiappori_results[4,5]
+Chiappori_results[4,6] = rHChiappori1950$HellingDiagAssoc
+Chiappori_results[5,6] = rHChiappori1970$HellingDiagAssoc
+Chiappori_results[6,6] = Chiappori_results[5,6] - Chiappori_results[4,6]
+Chiappori_results[4,7] = rAChiappori1950
+Chiappori_results[5,7] = rAChiappori1970
+Chiappori_results[6,7] = Chiappori_results[5,7] - Chiappori_results[4,7]
+
+# Fiinally populate Pearson correlations
+for (i in 1:length(tablesChiap50)) {
+  Chiappori_results[7,i] = rChiappori_1950_2x2[[i]]$Pearson
+  Chiappori_results[8,i] = rChiappori_1970_2x2[[i]]$Pearson
+  Chiappori_results[9,i] = Chiappori_results[8,i] - Chiappori_results[7,i]
+}
+Chiappori_results[7,5] = rChiappori1950$Pearson
+Chiappori_results[8,5] = rChiappori1970$Pearson
+Chiappori_results[9,5] = Chiappori_results[8,5] - Chiappori_results[7,5]
+
+# Fiinally populate Pearson midrank correlations and Avg Sorting Parm
+for (i in 1:length(tablesChiap50)) {
+  Chiappori_results[10,i] = rChiappori_1950_2x2[[i]]$PearsonRank
+  Chiappori_results[11,i] = rChiappori_1970_2x2[[i]]$PearsonRank
+  Chiappori_results[12,i] = Chiappori_results[11,i] - Chiappori_results[10,i]
+  Chiappori_results[13,i] <- rSChiappori_1950_2x2[[i]]$AvgSortParm
+  Chiappori_results[14,i] <- rSChiappori_1970_2x2[[i]]$AvgSortParm
+  Chiappori_results[15,i] = Chiappori_results[14,i] - Chiappori_results[13,i]
+  Chiappori_results[16,i] <- rSChiappori_1950_2x2_pbar[[i]]$AvgSortParm
+  Chiappori_results[17,i] <- rSChiappori_1970_2x2_pbar[[i]]$AvgSortParm
+  Chiappori_results[18,i] = Chiappori_results[17,i] - Chiappori_results[16,i]
+  Chiappori_results[19,i] <- rSChiappori_1950_2x2_pbar[[i]]$AvgSortParmNorm
+  Chiappori_results[20,i] <- rSChiappori_1970_2x2_pbar[[i]]$AvgSortParmNorm
+  Chiappori_results[21,i] = Chiappori_results[20,i] - Chiappori_results[19,i]
+  Chiappori_results[22,i] <- rHChiappori_1950_2x2[[i]]$HellingDiagAssoc
+  Chiappori_results[23,i] <- rHChiappori_1970_2x2[[i]]$HellingDiagAssoc
+  Chiappori_results[24,i] = Chiappori_results[23,i] - Chiappori_results[22,i]
+  Chiappori_results[25,i] <- rHChiappori_1950_2x2[[i]]$HellingDiagDist
+  Chiappori_results[26,i] <- rHChiappori_1970_2x2[[i]]$HellingDiagDist
+  Chiappori_results[27,i] = Chiappori_results[26,i] - Chiappori_results[25,i]
+}
+Chiappori_results[10,5] = rChiappori1950$PearsonRank
+Chiappori_results[11,5] = rChiappori1970$PearsonRank
+Chiappori_results[12,5] = Chiappori_results[11,5] - Chiappori_results[10,5]
+Chiappori_results[13,5] = rSChiappori1950$AvgSortParm
+Chiappori_results[14,5] = rSChiappori1970$AvgSortParm
+Chiappori_results[15,5] = Chiappori_results[14,5] - Chiappori_results[13,5]
+Chiappori_results[16,5] = rSChiappori1950_pbar$AvgSortParm
+Chiappori_results[17,5] = rSChiappori1970_pbar$AvgSortParm
+Chiappori_results[18,5] = Chiappori_results[17,5] - Chiappori_results[16,5]
+Chiappori_results[19,5] = rSChiappori1950_pbar$AvgSortParmNorm
+Chiappori_results[20,5] = rSChiappori1970_pbar$AvgSortParmNorm
+Chiappori_results[21,5] = Chiappori_results[20,5] - Chiappori_results[19,5]
+Chiappori_results[22,5] = rHChiappori1950$HellingDiagAssoc
+Chiappori_results[23,5] = rHChiappori1970$HellingDiagAssoc
+Chiappori_results[24,5] = Chiappori_results[23,5] - Chiappori_results[22,5]
+Chiappori_results[25,5] = rHChiappori1950$HellingDiagDist
+Chiappori_results[26,5] = rHChiappori1970$HellingDiagDist
+Chiappori_results[27,5] = Chiappori_results[26,5] - Chiappori_results[25,5]
+
+
+print(1)
+Chiappori_results
+
+
+
+
+```
+
+
+
+
+
+
+## Schwarz & Mare "Trends in Educational Assortative Marriage" 2005
+
+Data for 1940, 1960, 1970, 1980, 1990, 2000
+Categories years of schooling:
+ <10 10-11 12 13-15 >=16
+ 
+```{r}
+
+tableSchwarzMare <- list()
+
+xx1 <- c('<10','10-11','12','13-15','>=16')
+# 1940
+xx2 <- matrix(c(43.99,4.45,3.12,.78,.4,
+                7.33,3.88,2.61,.69,.36,
+                6.55,3.6,8.13,2.29,1.91,
+                1.32,.67,1.47,1.58,1.62,
+                .32,.16,.47,.54,1.75),5,5,byrow=TRUE)
+if(abs(sum(xx2)-100) > 0.1) {print('error')} else {print('ok')}
+#xx2 <- xx2 / sum(xx2)
+#rownames(xx2) <- xx1
+#colnames(xx2) <- xx1
+tableSchwarzMare[[1]] <- xx2
+# 1960
+xx2 <- matrix(c(16.02,3.41,3.49,0.82,0.23,
+                6.23,4.35,4.58,1.4,.46,
+                7.97,6.14,17.12,6.1,3.77,
+                .97,.86,2.67,3.57,3.93,
+                .18,.18,.61,.97,3.95),5,5,byrow=TRUE)
+if(abs(sum(xx2)-100) > 0.1) {print('error')} else {print('ok')}
+#xx2 <- xx2 / sum(xx2)
+#rownames(xx2) <- xx1
+#colnames(xx2) <- xx1
+tableSchwarzMare[[2]] <- xx2
+# 1970
+xx2 <- matrix(c(7.94,2.41,3.09,.69,.21,
+                4.13,3.63,4.88,1.37,.38,
+                5.77,5.47,21.86,8.27,4.44,
+                .71,.85,3.38,5.27,5.48,
+                .2,.18,.89,1.54,6.95),5,5,byrow=TRUE)
+if(abs(sum(xx2)-100) > 0.1) {print('error')} else {print('ok')}
+#xx2 <- xx2 / sum(xx2)
+tableSchwarzMare[[3]] <- xx2
+# 1980
+xx2 <- matrix(c(4.27,1.35,2.24,.7,.22,
+                2.03,2.06,3.63,1.30,.27,
+                3.42,3.76,21.99,9.25,4.06,
+                .73,.93,5.16,9.42,7.49,
+                .15,.15,1.27,2.8,11.35),5,5,byrow=TRUE)
+if(abs(sum(xx2)-100) > 0.1) {print('error')} else {print('ok')}
+#xx2 <- xx2 / sum(xx2)
+tableSchwarzMare[[4]] <- xx2
+# 1990
+xx2 <- matrix(c(2.68,.68,1.31,.53,.14,
+                .84,1.25,2.33,.82,.15,
+                1.89,2.57,18.09,9.57,3.24,
+                .68,.98,8.45,14.4,7.83,
+                .14,.17,2,4.76,14.51),5,5,byrow=TRUE)
+if(abs(sum(xx2)-100) > 0.1) {print('error')} else {print('ok')}
+#xx2 <- xx2 / sum(xx2)
+tableSchwarzMare[[5]] <- xx2
+# 2000
+xx2 <- matrix(c(3.47,.6,1.42,.52,.16,
+                .68,1.01,1.79,.65,.13,
+                1.8,2.02,15.54,7.33,2.41,
+                .76,1.06,9.26,14.91,6.98,
+                .17,.18,2.8,6.33,18.02),5,5,byrow=TRUE)
+if(abs(sum(xx2)-100) > 0.1) {print('error')} else {print('ok')}
+#xx2 <- xx2 / sum(xx2)
+tableSchwarzMare[[6]] <- xx2
+
+
+
+```
+
+
+```{r}
+
+rCSchwarzMare <- lapply(tableSchwarzMare,calcDiscreteCopula)
+rHSchwarzMare <- lapply(tableSchwarzMare,calcDiscreteHellinger)
+rSSchwarzMareP <- lapply(tableSchwarzMare,sort_parm)
+rSSchwarzMareC <- lapply(rCSchwarzMare, function(x) sort_parm(x$pbar))
+rASchwarzMare <- lapply(tableSchwarzMare,altham_index) 
+#rSSchwarzMareC <- list()
+#for (i in 1:length(tableSchwarzMare)){
+#  rSSchwarzMareC[[i]] <- sort_parm(rCSchwarzMare[[i]]$pbar)
+#}
+
+```
+
+
+
+```{r}
+
+SchwarzMare_results <- matrix(0,nrow=9,ncol=6)
+xyears <- c(1940,1960,1970,1980,1990,2000)
+colnames(SchwarzMare_results) <- xyears
+rownames(SchwarzMare_results) = c('YuleY',"HellingerAssoc",'Wtd Sort Parm Original p','Wtd Sort Parm Copula',
+                                  'HellingDiagDist','Diag sum orig','Diag sum copula','Helling Depend',
+                                  'Altham Ind')
+#round(rCBlumeWhiteMacro$YuleY,digits=3)
+
+xyear <- c(1940,1960,1970,1980,1990,2000)
+xdiagporig <- c(0,0,0,0,0,0)
+xdiagpbar <- xdiagporig
+
+for (i in 1:6) {
+  SchwarzMare_results[1,i] <- round(rCSchwarzMare[[i]]$YuleY,digits=3)
+  SchwarzMare_results[2,i] <- round(rHSchwarzMare[[i]]$HellingDiagAssoc,digits=3)
+  SchwarzMare_results[3,i] <- round(rSSchwarzMareP[[i]]$AvgSortParm,digits=3)
+  SchwarzMare_results[4,i] <- round(rSSchwarzMareC[[i]]$AvgSortParm,digits=3)
+  SchwarzMare_results[5,i] <- round(rHSchwarzMare[[i]]$HellingDiagDist,digits=3)
+  SchwarzMare_results[6,i] <- round(sum(diag(rCSchwarzMare[[i]]$porig)),digits=3)
+  SchwarzMare_results[7,i] <- round(sum(diag(rCSchwarzMare[[i]]$pbar)),digits=4)
+  SchwarzMare_results[8,i] <- round(rHSchwarzMare[[i]]$HellingDiagAssoc,digits=3)
+  SchwarzMare_results[9,i] <- round(rASchwarzMare[[i]],digits=2)
+  xdiagporig[i] <- SchwarzMare_results[7,i]
+  xdiagpbar[i] <- SchwarzMare_results[8,i]
+}
+
+print(SchwarzMare_results)
+
+plot(xyear,xdiagporig)
+lines(xyear,xdiagpbar)
+
+```
+
+
+
+## Eika, Mogstad, Zafar
+
+In Appendix Table D$ "U.S. Marital Sorting Parameters" they give functions of the original probability matrix elements:
+
+$$ \frac{p_{ij}}{p_{.j} p_{i.}} $$
+
+I have to "unwind" them (in "fitSortParm.Rmd") by fitting the 6 marginals to match the matrixes of "sorting parameters"
+
+Original "sorting parameters" (just for reference)
+
+
+
+```{r}
+
+vsortParm1962 <- matrix(c(1.57,.61,.40,.10,
+                          .68,1.57,1.29,.84,
+                          .41,.86,2.12,2.59,
+                          .22,.53,1.27,4.75),4,4,byrow=TRUE)
+vsortParm1980 <- matrix(c(2.59,.83,.39,.08,
+                          .83,1.45,1.04,.52,
+                          .32,.69,1.76,1.52,
+                          .1,.28,.83,3.07),4,4,byrow=TRUE)
+vsortParm2013 <- matrix(c(7.25,1,.3,.07,
+                          1.13,1.96,.83,.33,
+                          .52,.95,1.68,.68,
+                          .11,.4,.76,1.84),4,4,byrow=TRUE)
+
+# And then fitted probability matrixes:
+
+plist <- list()
+pEikaMogstedZafar1962 <- matrix(c(0.338337228,0.068155452,0.01959652,0.005529587,
+0.129838694,0.155423079,0.05599558,0.041154478,
+0.023555168,0.025616597,0.02768898,0.038180772,
+0.007812158,0.009757641,0.01025229,0.043279729),4,4,byrow=TRUE)
+pEikaMogstedZafar1962 <- pEikaMogstedZafar1962 / sum(pEikaMogstedZafar1962)
+plist[[1]] <- pEikaMogstedZafar1962
+pEikaMogstedZafar1980 <- matrix(c(0.135194922,0.05788028,0.01589550,0.004022553,
+0.091928993,0.21455289,0.08994080,0.055479032,
+0.014215237,0.04094918,0.06104721,0.065042743,
+0.003771586,0.01410828,0.02444281,0.111535601),4,4,byrow=TRUE)
+pEikaMogstedZafar1980 <- pEikaMogstedZafar1980 / sum(pEikaMogstedZafar1980)
+plist[[2]] <- pEikaMogstedZafar1980
+pEikaMogstedZafar2013 <- matrix(c(0.043430673,0.02092853,0.005474657,0.001856413,
+0.024494472,0.14843141,0.054808117,0.031668067,
+0.012036916,0.07682730,0.118467253,0.069684915,
+0.003602252,0.04576374,0.075817964,0.266757828),4,4,byrow=TRUE)
+pEikaMogstedZafar2013 <- pEikaMogstedZafar2013 / sum(pEikaMogstedZafar2013)
+plist[[3]] <- pEikaMogstedZafar2013
+
+rHlist <- lapply(plist,calcDiscreteHellinger)
+rClist <- lapply(plist,calcDiscreteCopula)
+rAlist <- lapply(plist,altham_index)
+
+
+
+presults <- matrix(0,3,7)
+rownames(presults) <- c('EikaMogstedZafar 1962','EikaMogstedZafar 1980','EikaMogstedZafar 2013')
+colnames(presults) <- c("Yule's rho","Hellin Dep","Helling Assoc","Pearson",
+                        "PearsonRank",'HellingDiagDist','Altham')
+
+for (i in 1:length(plist)) {
+  presults[i,1] <- round(rHlist[[i]]$YuleY,digits=4)
+  presults[i,2] <- round(rHlist[[i]]$HellingDiagAssoc,digits=4)
+  presults[i,3] <- round(rHlist[[i]]$HellingDiagAssoc,digits=4)
+  presults[i,4] <- round(rClist[[i]]$Pearson,digits=4)
+  presults[i,5] <- round(rClist[[i]]$PearsonRank,digits=4)
+  presults[i,6] <- round(rHlist[[i]]$HellingDiagDist,digits=4)
+  presults[i,7] <- round(rAlist[[i]],digits=3)
+}
+print(1)
+presults
+print("Sorting parameters for 2013 from discrete copula - different from original sorting parameters")
+vsortParm1962 - rClist[[1]]$pbar/(.25*.25)
+vsortParm2013 - rClist[[3]]$pbar/(.25*.25)
+print('1962 discrete copula sorting parameters')
+rClist[[1]]$pbar/(.25*.25)
+print('1980 discrete copula sorting parameters')
+rClist[[2]]$pbar/(.25*.25)
+print('2013 discrete copula sorting parameters')
+rClist[[3]]$pbar/(.25*.25)
+
+x1 <- rowSums(pEikaMogstedZafar1962)*colSums(pEikaMogstedZafar1962)
+x1 <- sum(diag(vsortParm1962)*x1) / sum(x1)
+x2 <- rowSums(pEikaMogstedZafar1980)*colSums(pEikaMogstedZafar1980)
+x2 <- sum(diag(vsortParm1980)*x2) / sum(x2)
+x3 <- rowSums(pEikaMogstedZafar2013)*colSums(pEikaMogstedZafar2013)
+x3 <- sum(diag(vsortParm2013)*x3) / sum(x3)
+
+print(paste('Weighted diagonals of original sharing parms, 1962, 1980, 2013',x1,x2,x3))
+
+# For discrete copula, marginals are all .25 so 
+#   pbar -> sort parms requires divided by (.25*.25)
+#   weighted diagonals requires  * .25
+#   so overal it is daig(pbar) / .25
+x1 <- sum(diag(rClist[[1]]$pbar)) / .25
+x2 <- sum(diag(rClist[[2]]$pbar)) / .25
+x3 <- sum(diag(rClist[[3]]$pbar)) / .25
+
+
+print(paste('Weighted diagonals of discrete copula sharing parms, 1962, 1980, 2013',x1,x2,x3))
+
+
+# Calculate sorting parameters using 1962 dependence and 2013 marginals
+xr2013 <- rowSums(pEikaMogstedZafar2013)
+xc2013 <- colSums(pEikaMogstedZafar2013)
+#x1962_2013 <- ipu_matrix(rClist[[1]]$pbar, xr2013, xc2013)  # create pbar via iterative proportional fittinng, per Geenens p 430
+x1962_2013 <- Ipfp(rClist[[1]]$pbar,list(1,2), list(xr2013, xc2013))$p.hat  # create pbar via iterative proportional fittinng, per Geenens p 430
+
+print(paste("marital sorting parm for no HS degree, college, 1962 dependence and 2013 marginals",x1962_2013[1,1]/(xr2013[1]*xc2013[1]),x1962_2013[4,4]/(xr2013[4]*xc2013[4])))
+
+# Calculate sorting parameters using 1962 marginals and 1980 and 2013 dependence
+x1 <- rowSums(pEikaMogstedZafar1962)*colSums(pEikaMogstedZafar1962)
+x1 <- sum(diag(vsortParm1962)*x1) / sum(x1)
+xr1962 <- rowSums(pEikaMogstedZafar1962)
+xc1962 <- colSums(pEikaMogstedZafar1962)
+#x1980D_1962M <- ipu_matrix(rClist[[2]]$pbar, xr1962, xc1962)  # 1980 dependence, 1962 marginals
+#x2013D_1962M <- ipu_matrix(rClist[[3]]$pbar, xr1962, xc1962)  # 2013 dependence, 1962 marginals
+x1980D_1962M <- Ipfp(rClist[[2]]$pbar,list(1,2), list(xr1962, xc1962))$p.hat  # 1980 dependence, 1962 marginals
+x2013D_1962M <- Ipfp(rClist[[3]]$pbar,list(1,2), list(xr1962, xc1962))$p.hat  # 2013 dependence, 1962 marginals
+xr <- matrix(xr1962,4,4)
+xc <- matrix(xc1962,4,4,byrow=TRUE)
+xsort <- x1980D_1962M / (xr*xc)     # Matrix of "sorting parameters" using 1980 dependence, 1962 marginals
+x2 <- xr1962*xc1962
+x2 <- sum(diag(xsort)*x2) / sum(x2)
+xsort <- x2013D_1962M / (xr*xc)     # Matrix of "sorting parameters" using 2013 dependence, 1962 marginals
+x3 <- xr1962*xc1962
+x3 <- sum(diag(xsort)*x3) / sum(x3)
+
+print(paste("wtd avg marital sorting for 1962, 1980, 2013 using 1962 Marginals, 1962, 1980, 2013 Dependence",x1,x2,x3))
+
+xr <- rowSums(pEikaMogstedZafar1980)
+xc <- colSums(pEikaMogstedZafar1980)
+#x1962D_1980M <- ipu_matrix(pEikaMogstedZafar1962,xr,xc)  # 1962 dependence, 1980 marginals
+x1962D_1980M <- Ipfp(pEikaMogstedZafar1962,list(1,2),list(xr,xc))$p.hat  # 1962 dependence, 1980 marginals
+x2 <- sort_parm(x1962D_1980M)$AvgSortParm
+xr <- rowSums(pEikaMogstedZafar2013)
+xc <- colSums(pEikaMogstedZafar2013)
+#x1962D_2013M <- ipu_matrix(pEikaMogstedZafar1962,xr,xc)  # 1962 dependence, 2013 marginals
+x1962D_2013M <- Ipfp(pEikaMogstedZafar1962,list(1,2),list(xr,xc))$p.hat  # 1962 dependence, 2013 marginals
+x3 <- sort_parm(x1962D_2013M)$AvgSortParm
+print(paste("wtd avg marital sorting for 1962, 1980, 2013 using 1962 Dependence, 1962, 1980, 2013 Marginals",x1,x2,x3))
+
+print('Copulas for 1962, 1980, 2013')
+rClist[[1]]$pbar
+rClist[[2]]$pbar
+rClist[[3]]$pbar
+
+```
+
+
+
+
+## Greenwood, Guner, Kocharkov, Santos 2014
+
+Greenwood, Jeremy, Nezih Guner, Georgi Kocharkov, and Cezar Santos. 2014. “Marry Your Like: Assortative Mating and Income Inequality.” American Economic Review 104 (5): 348–53. https://doi.org/10.1257/aer.104.5.348.
+
+
+
+
+```{r}
+
+
+plist <- list()
+pGreenwood1960 <- matrix(c(.323,.138,.019,.004,.001,
+                           .076,.165,.028,.008,.002,
+                           .018,.051,.027,.008,.002,
+                           .005,.027,.019,.018,.003,
+                           .003,.016,.017,.016,.008),5,5,byrow=TRUE)
+pGreenwood1960 <- pGreenwood1960 / sum(pGreenwood1960)
+plist[[1]] <- pGreenwood1960
+pGreenwood2005 <- matrix(c(.039,.031,.010,.003,.001,
+                           .023,.192,.082,.037,.012,
+                           .005,.065,.088,.047,.016,
+                           .002,.030,.045,.104,.037,
+                           .001,.010,.018,.050,.053),5,5,byrow=TRUE)
+pGreenwood2005 <- pGreenwood2005 / sum(pGreenwood2005)
+plist[[2]] <- pGreenwood2005
+
+rHlist <- lapply(plist,calcDiscreteHellinger)
+rClist <- lapply(plist,calcDiscreteCopula)
+rAlist <- lapply(plist,altham_index)
+
+
+presults <- matrix(0,2,7)
+rownames(presults) <- c('Greenwood 1960','Greenwood 2005')
+colnames(presults) <- c("Yule's rho","Hellin Dep","Helling Assoc","Pearson","PearsonRank",'HellingDiagDist',
+                        'Altham')
+
+for (i in 1:length(plist)) {
+  presults[i,1] <- round(rHlist[[i]]$YuleY,digits=4)
+  presults[i,2] <- round(rHlist[[i]]$HellingDiagAssoc,digits=4)
+  presults[i,3] <- round(rHlist[[i]]$HellingDiagAssoc,digits=4)
+  presults[i,4] <- round(rClist[[i]]$Pearson,digits=4)
+  presults[i,5] <- round(rClist[[i]]$PearsonRank,digits=4)
+  presults[i,6] <- round(rHlist[[i]]$HellingDiagDist,digits=4)
+  presults[i,7] <- round(rAlist[[i]],digits=3)
+}  
+print(1)
+presults
+
+
+xr <- matrix(rowSums(pGreenwood1960),5,5)
+xc <- matrix(colSums(pGreenwood1960),5,5,byrow=TRUE)
+psortGreenwood1960 <- pGreenwood1960 / (xr * xc)
+csortGreenwood1960 <- rClist[[1]]$pbar / (.2*.2)
+print(paste("1962 ratio of sum of actual to random diagonals, original and copula",sum(diag(pGreenwood1960)) / sum(diag(xr*xc)),sum(diag(rClist[[1]]$pbar)) / .2))
+xr <- matrix(rowSums(pGreenwood2005),5,5)
+xc <- matrix(colSums(pGreenwood2005),5,5,byrow=TRUE)
+psortGreenwood2005 <- pGreenwood2005 / (xr * xc)
+csortGreenwood2005 <- rClist[[2]]$pbar / (.2*.2)
+print(paste("2005 ratio of sum of actual to random diagonals, original and copula",sum(diag(pGreenwood2005)) / sum(diag(xr*xc)),sum(diag(rClist[[2]]$pbar)) / .2))
+
+
+x1 <- rowSums(pGreenwood1960)*colSums(pGreenwood1960)
+x1 <- sum(diag(psortGreenwood1960)*x1) / sum(x1)
+x2 <- rowSums(pGreenwood2005)*colSums(pGreenwood2005)
+x2 <- sum(diag(psortGreenwood2005)*x2) / sum(x2)
+
+print(paste('Weighted diagonals of original sharing parms, 1960, 2005',x1,x2))
+
+print("1960 and 2005 sorting parameters orginal matrix")
+print(psortGreenwood1960)
+print(psortGreenwood2005)
+print("1960 and 2005 sorting parameters copula")
+print(csortGreenwood1960)
+print(csortGreenwood2005)
+
+```
+

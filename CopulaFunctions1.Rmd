@@ -1,0 +1,255 @@
+---
+title: "Discrete Copula Functions"
+author: "[Thomas Coleman](http://www.hilerun.org/econ)"
+output: html_notebook
+---
+
+# Functions for Discrete Copula, Yule's Rank Correlation, Hellinger Dependence, and Related Metrics
+
+#### See "Notes on Dependence, Correlation, and Discrete Copulas, with Application to Exchange Mobility and Assortative Matching" working paper at https://papers.ssrn.com/abstract=5057549 
+
+#### This notebook is licensed under the [BSD 2-Clause License](https://opensource.org/licenses/BSD-2-Clause)
+
+## Functions for calculating Discrete Copula, Yule's rho, and Geenens's D, Hellinger indexes, etc.
+
+Based on 
+Geenens, Gery. 2020. “Copula Modeling for Discrete Random Vectors.” Dependence Modeling 8 (1): 417–40. https://doi.org/10.1515/demo-2020-0022.
+———. 2023. “Towards a Universal Representation of Statistical Dependence.” arXiv. https://doi.org/10.48550/arXiv.2302.08151.
+
+and also 
+Coleman, Thomas S. 2025. “Notes on Dependence, Correlation, and Discrete Copulas, with Application to Exchange Mobility and Assortative Matching.” SSRN. https://papers.ssrn.com/abstract=5057549. But more up-to-date at https://www.closemountain.com/papers/ExchangeMobilityNotes.pdf
+
+
+### Introduction
+
+These functions calculate the following:
+
+- Discrete copula from an RxS discrete probability matrix
+- Yule's rank correlation, the discrete version of Spearman's rank correlation
+   - Calculate by the Pearson correlation of ranks, using the discrete copula
+- Hellinger dependence index (and Hellinger distance from independence copula)
+- Hellinger diagonal associaiton (and Hellinger distance from comonotonic copula)
+- Matrix of sorting parameters ($\frac{p_{ij}}{p_{i.}p_{.j}}$)
+  - For both original matrix and discrete copula 
+- Average diagonal (like-like match) sorting parameters
+  - For both original matrix and discrete copula 
+- Althams index (although it will be NA in the presence of zeros)
+
+
+```{r}
+library(knitr)
+options(scipen=5)
+
+
+# install.packages("mipfp")
+require("mipfp")
+#require("dplyr")          ## load For doing data manipulation, such as group_by and sum. The "select" function gets 
+
+
+```
+
+
+
+#### Discrete Copula & Yule's rho
+
+```{r}
+
+calcDiscreteCopula <- function(porig) {
+  xdim <- dim(porig)
+  r <- xdim[1]
+  c <- xdim[2]
+  row_targets <- rep(1/r,r)
+  col_targets <- rep(1/c,c)
+  oddsratio <- porig[1,1] * porig[2:r,2:c]       # the p00*pxy part
+  x1 <- porig[2:r,1] %o% porig[1,2:c]            # the p0x*p0Y part
+  oddsratio <- oddsratio / x1                    # oddsratio matrix
+  if (all(dim(porig) == 2)) {    # If this is 2x2, simple formulae
+    oddsratio <- (porig[1,1]*porig[2,2]) / (porig[1,2]*porig[2,1])
+    x1 <- sqrt(oddsratio)
+    x2 <- 2*(1+x1)
+    pbar <- matrix(c(x1/x2,1/x2,1/x2,x1/x2),2,2,byrow=TRUE)
+    YuleY <- (x1-1)/(x1+1)
+  }
+  else {   # Not 2x2, so must do ipfr
+    pbar <- Ipfp(porig,list(1,2), list(row_targets, col_targets))$p.hat  # create pbar via iterative proportional fittinng, per Geenens p 430
+    rown <- seq(r) - 1    # vector of row and columns index numbers (from zero)
+    coln <- seq(c) - 1
+    YuleY <- (4/((r-1)*(c-1)))*rown %*% (pbar %*% coln) - 1   # This should be sum(u*v*puv)
+    YuleY <- YuleY * 3 * sqrt(((r-1)*(c-1))/((r+1)*(c+1)))
+  }
+  
+# Pearson correlation from original matrix, standard scores
+  xx1 <- matrix(1:c,c,r)
+  xx2 <- as.vector(xx1)
+  xx1 <- t(matrix(1:r,r,c))
+  xx3 <- as.vector(xx1)
+  xxvalues <- matrix(c(xx2,xx3),nrow=length(xx2),ncol=2)
+  xxProb <- as.vector(t(porig))   # Need to transpose to get in same order as xxvalues
+  Pearson = cov.wt(xxvalues,wt=xxProb,cor=TRUE)$cor[1,2]
+# Pearson correlation from original matrix, midrank
+  xr <- rowSums(porig)
+  xc <- colSums(porig)
+  x1 <- rep(0,c)
+  x1[2:c] <- cumsum(xc)[1:(c-1)]
+  x2 <- xc / 2    # middle
+  x3 <- x2 + x1   # midranks
+  xx1 <- matrix(x3,c,r)
+  xx2 <- as.vector(xx1)
+  x1 <- rep(0,r)
+  x1[2:r] <- cumsum(xr)[1:(r-1)]
+  x2 <- xr / 2    # middle
+  x3 <- x2 + x1   # midranks
+  xx1 <- t(matrix(x3,r,c))
+  xx3 <- as.vector(xx1)
+  xxvalues <- matrix(c(xx2,xx3),nrow=length(xx2),ncol=2)
+  PearsonRank = cov.wt(xxvalues,wt=xxProb,cor=TRUE)$cor[1,2]
+
+  return(list(pbar=pbar,YuleY=YuleY,Pearson=Pearson,PearsonRank=PearsonRank,oddsratio = oddsratio))
+}  
+
+
+
+
+```
+
+
+
+
+
+
+#### Hellinger Association and discrete version of Hellinger dependence index 
+
+
+Based on equation 4.1 and on page 21 of Geenens's 2019 Hellinger paper (651 of JASA)
+
+```{r}
+
+
+calcDiscreteHellinger <- function(porig) {
+  xdim <- dim(porig)
+  r <- xdim[1]
+  c <- xdim[2]
+  row_targets <- rep(1/r,r)
+  col_targets <- rep(1/c,c)
+  oddsratio <- porig[1,1] * porig[2:r,2:c]       # the p00*pxy part
+  x1 <- porig[2:r,1] %o% porig[1,2:c]            # the p0x*p0Y part
+  oddsratio <- oddsratio / x1                    # oddsratio matrix
+  if (all(dim(porig) == 2)) {    # If this is 2x2, simple formulae
+    oddsratio <- (porig[1,1]*porig[2,2]) / (porig[1,2]*porig[2,1])
+    x1 <- sqrt(oddsratio)
+    x2 <- 2*(1+x1)
+    pbar <- matrix(c(x1/x2,1/x2,1/x2,x1/x2),2,2,byrow=TRUE)
+    YuleY <- (x1-1)/(x1+1)
+  }
+  else {   # Not 2x2, so must do ipfr
+#    pbar <- ipu_matrix(porig, row_targets, col_targets)  # create pbar via iterative proportional fittinng, per Geenens p 430
+    pbar <- Ipfp(porig,list(1,2), list(row_targets, col_targets))$p.hat  # create pbar via iterative proportional fittinng, per Geenens p 430
+#    pbar <- matrix(unlist(pbar),ncol=c)
+    rown <- seq(r) - 1    # vector of row and columns index numbers (from zero)
+    coln <- seq(c) - 1
+    YuleY <- (4/((r-1)*(c-1)))*rown %*% (pbar %*% coln) - 1   # This should be sum(u*v*puv)
+    YuleY <- YuleY * 3 * sqrt(((r-1)*(c-1))/((r+1)*(c+1)))
+  }
+  
+  pbarsqrt <- sqrt(pbar)
+  margsqrt <- matrix(sqrt(1/(r*c)),r,c)
+  Hsq_DepDist <- sum((pbarsqrt - margsqrt)^2)/2
+  BhatCoeff <- 1 - Hsq_DepDist
+  HellingDepInd <- (2/BhatCoeff^2)*sqrt(BhatCoeff^4 + sqrt(4 - 3*BhatCoeff^4) - 2)
+
+  # Try Hellinger distance from co-montonicity copula. 
+  # Try the difference as a "correlation" BUT only for square matrix
+  if (r == c) {
+    hsqpos <- diag(r) / sqrt(r)     # square root of comonotonic
+    hsqpos <- sum((pbarsqrt - hsqpos)^2)/2       # Hellinger-sq distance from comonotonic
+    HellingDiagDist <- (1-hsqpos)
+    x2 <- 1 - 1/sqrt(2)                    # the zero corr for 2x2
+    xr <- 1 - 1/sqrt(r)                    # the zero corr for rxr
+    if (hsqpos < xr) {hsqpos = x2*(hsqpos/xr)} else {hsqpos = 1 - (1-x2)*((1 - hsqpos)/(1 - xr))}  # This separately scales
+                                      # For below zero and above zero
+    HellingDiagAssoc <- 1 - 4*hsqpos + 2*hsqpos^2    
+  }
+    
+  return(list(YuleY=YuleY,Hsq_DepDist=Hsq_DepDist,HellingDepInd=HellingDepInd,HellingDiagAssoc=HellingDiagAssoc,
+              HellingDiagDist=HellingDiagDist))
+}  
+
+
+
+```
+
+
+
+
+#### Function for the weighted average diagonal sorting parameter
+
+```{r}
+
+sort_parm <- function(pmat){
+  xn <- dim(pmat)
+  if (xn[1] != xn[2]) {return(NA)}  # not a square matrix
+  else {
+    xn <- xn[1]
+    xr <- matrix(rowSums(pmat),xn,xn)      # Don't need to do the full matrix, only the diagonal. Leaving this here for reference
+    xc <- matrix(colSums(pmat),xn,xn,byrow=TRUE)
+    xsort <- pmat / (xr*xc)     # Matrix of "sorting parameters" 
+    x1 <- rowSums(pmat)*colSums(pmat)     # product of marginals (probabilities for independent, conditional on the marginals)
+    #x2 <- diag(pmat) / x1             # diagonal 'sorting paramters' (ratio of actual to 'independent' probabilities)
+    #x2 <- sum(x2*x1) / sum(x1)
+    x2 <- sum(diag(pmat)) / sum(x1)    # this is the way Greenwwod et al. does it, and same (see 2 lines above) as Eika, Mogsted, Zafar method
+    return(list(AvgSortParm = x2,AvgSortParmNorm = x2 / xn[1],SortParmMat = xsort))
+  }
+}
+
+```
+
+
+#### Some utility functions - odds ratio matrix and Altham index
+
+
+```{r}
+
+or_matrix <- function(pmat){  # Function that returns matrix (r-1)(s-1) of odds ratios
+  xdim <- dim(pmat)
+  xoratio <- matrix(0,xdim[1]-1,xdim[2]-1)
+  for (i in 2:xdim[1]){
+    for (j in 2:xdim[2]){
+      xoratio[i-1,j-1] <- (pmat[1,1]*pmat[i-1,j-1]) / (pmat[1,j-1]*pmat[i-1,1])
+    }
+  }
+  return(xoratio)
+}
+
+altham_metric <- function(pmat,qmat){   # Function that returns Altham metric: 
+                                        #   sum(i,j,l,m) sqrt[ (log(pij*plm*qim*qlj)/log(pim*plj*qij*qlm))^2]
+  np = dim(pmat)
+  nq = dim(qmat)
+  alth_met <- 0
+  if ((np[1] == nq[1]) & (np[2] == nq[2])) {
+    for (i in 1:np[1]) {
+      for (j in 1:np[2]) {
+        for (l in 1:nq[1]) {
+          for (m in 1:nq[2]) {
+            alth_met = alth_met + log( (pmat[i,j]*pmat[l,m]*qmat[i,m]*qmat[l,j]) / (pmat[i,m]*pmat[l,j]*qmat[i,j]*qmat[l,m]) )^2
+          }
+        }
+      }
+    }
+    alth_met <- sqrt(alth_met)
+    return(alth_met)
+  }
+  else {return(NA)}
+}
+
+altham_index <- function(pmat){   # Altham index is Altham matric with independence copula as qmat
+  np <- dim(pmat)
+  qmat <- matrix(1/(np[1]*np[2]),np[1],np[2])
+  return(altham_metric(pmat,qmat))
+}
+
+
+
+```
+
+
+
